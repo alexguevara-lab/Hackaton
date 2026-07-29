@@ -118,6 +118,7 @@ export default function App() {
   const [isSidebarHidden, setIsSidebarHidden] = useState<boolean>(false);
   const [saveStatus, setSaveStatus] = useState<"idle" | "saving" | "saved">("idle");
   const [isAutoFixing, setIsAutoFixing] = useState<boolean>(false);
+  const [auditError, setAuditError] = useState<string>("");
   const [authUser, setAuthUser] = useState<AuthUser>({
     id: "",
     email: "",
@@ -131,6 +132,13 @@ export default function App() {
   const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   // Evita marcar "guardando" cuando el cambio de nodes/edges viene de cargar un diagrama.
   const hasHydratedRef = useRef(false);
+  // Instancia de React Flow para reencuadrar cuando cambia el ancho útil del canvas.
+  const rfRef = useRef<any>(null);
+  const fitCanvas = useCallback(() => {
+    const apply = () => rfRef.current?.fitView({ padding: 0.14, duration: 250, maxZoom: 1 });
+    requestAnimationFrame(apply);
+    setTimeout(apply, 220);
+  }, []);
 
   // Al editar el canvas se oculta automáticamente el menú principal
   const hideSidebarOnEdit = useCallback(() => {
@@ -174,6 +182,15 @@ export default function App() {
     const currentId = getCurrentProjectId();
     loadProjectData(currentId);
   }, [loadProjectData]);
+
+  // Reencuadra el diagrama cuando cambia el ancho útil del canvas (paneles/chat),
+  // para que ningún nodo quede oculto tras un panel lateral.
+  useEffect(() => {
+    if (!CANVAS_VIEWS.includes(activeView)) return;
+    const t = setTimeout(() => fitCanvas(), 120);
+    return () => clearTimeout(t);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeView, isChatOpen, currentVersion?.id]);
 
   useEffect(() => {
     if (!supabase) return;
@@ -501,6 +518,7 @@ export default function App() {
     if (!currentProject) return;
     setIsRunningAudit(true);
     setActiveView("audit");
+    setAuditError("");
 
     try {
       const data = await aiFetch("/api/ai/audit", {
@@ -509,6 +527,17 @@ export default function App() {
         clientName: currentProject.client_name,
         industry: currentProject.industry,
       });
+
+      if (data.error) {
+        setAuditError(
+          /api key|API_KEY|invalid/i.test(data.error)
+            ? "La IA rechazó la API key. Ábre Configuración IA y usa 'Probar conexión'."
+            : /not found|404/i.test(data.error)
+            ? "El modelo seleccionado no existe. Cámbialo en Configuración IA."
+            : `Error de IA: ${data.error}`
+        );
+        return;
+      }
       setAuditResult(data);
 
       // Marca badges de advertencia en los nodos afectados
@@ -661,6 +690,15 @@ export default function App() {
                 </button>
               )}
 
+              {/* El área de React Flow se inserta debajo de la barra superior y a la
+                  derecha del palette para que ningún nodo quede oculto tras ellos. */}
+              <div
+                className={
+                  isPresentationMode
+                    ? "absolute inset-0"
+                    : "absolute top-[68px] left-[168px] right-0 bottom-0"
+                }
+              >
               <ReactFlow
                 nodes={nodes}
                 edges={edges}
@@ -669,8 +707,15 @@ export default function App() {
                 onConnect={onConnect}
                 onNodeClick={onNodeClick}
                 onNodeDragStart={hideSidebarOnEdit}
+                onInit={(instance) => {
+                  rfRef.current = instance;
+                  fitCanvas();
+                }}
                 nodeTypes={nodeTypes}
                 fitView
+                fitViewOptions={{ padding: 0.14, maxZoom: 1 }}
+                minZoom={0.2}
+                proOptions={{ hideAttribution: true }}
                 className="bg-surface"
               >
                 <Background variant={BackgroundVariant.Dots} gap={20} size={1.5} color="#D9D9D9" />
@@ -690,6 +735,7 @@ export default function App() {
                   />
                 )}
               </ReactFlow>
+              </div>
             </div>
 
             {/* PANEL LATERAL: KICKOFF o AUDITORÍA */}
@@ -709,6 +755,7 @@ export default function App() {
                 <AuditView
                   project={currentProject}
                   auditResult={auditResult}
+                  auditError={auditError}
                   isRunningAudit={isRunningAudit}
                   isAutoFixing={isAutoFixing}
                   onRunAudit={handleRunAudit}

@@ -13,6 +13,7 @@ import { AuditResult, AuditGap, Project } from "../../types";
 interface AuditViewProps {
   project: Project;
   auditResult: AuditResult | null;
+  auditError?: string;
   isRunningAudit: boolean;
   isAutoFixing?: boolean;
   onRunAudit: () => void;
@@ -23,6 +24,7 @@ interface AuditViewProps {
 
 export const AuditView: React.FC<AuditViewProps> = ({
   auditResult,
+  auditError,
   isRunningAudit,
   isAutoFixing,
   onRunAudit,
@@ -58,6 +60,14 @@ export const AuditView: React.FC<AuditViewProps> = ({
           <span>{isRunningAudit ? "Auditando..." : "Re-auditar Flujo"}</span>
         </button>
       </div>
+
+      {/* Error de IA (key/modelo) */}
+      {auditError && (
+        <div className="mb-4 p-3 rounded-xl bg-danger-soft border border-danger/30 flex items-start gap-2">
+          <ShieldAlert className="w-4 h-4 text-danger shrink-0 mt-0.5" />
+          <p className="text-[11px] text-danger font-medium">{auditError}</p>
+        </div>
+      )}
 
       {/* Audit Score Hero */}
       {auditResult ? (

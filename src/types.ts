@@ -7,7 +7,14 @@ export interface AuthUser {
   role: string;
 }
 
-export type IndustryType = "ecommerce" | "salud" | "financiero" | "inmobiliario" | "otro";
+export type IndustryType =
+  | "ecommerce"
+  | "salud"
+  | "financiero"
+  | "inmobiliario"
+  | "automotriz"
+  | "educacion"
+  | "otro";
 
 export type ProjectStatus = "draft" | "kickoff" | "validated" | "delivered";
 

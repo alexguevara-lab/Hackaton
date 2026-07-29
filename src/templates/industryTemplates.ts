@@ -10,9 +10,240 @@ export const getTemplateForIndustry = (industry: IndustryType, clientName: strin
       return getFinancieroTemplate(clientName);
     case "inmobiliario":
       return getInmobiliarioTemplate(clientName);
+    case "automotriz":
+      return getAutomotrizTemplate(clientName);
+    case "educacion":
+      return getEducacionTemplate(clientName);
     default:
       return getEcommerceTemplate(clientName);
   }
+};
+
+const getAutomotrizTemplate = (clientName: string): DiagramGraph => {
+  const nodes: CustomCanvasNode[] = [
+    {
+      id: "node-start",
+      type: "start",
+      position: { x: 300, y: 50 },
+      data: { label: "Inicio WhatsApp Automotriz", nodeType: "start", description: "Inbound - Prospecto de vehículo" },
+    },
+    {
+      id: "node-welcome",
+      type: "message",
+      position: { x: 300, y: 160 },
+      data: {
+        label: "Bienvenida Automotriz",
+        nodeType: "message",
+        messageText: `¡Hola! 🚗 Bienvenido a *${clientName}*. ¿En qué podemos ayudarte hoy?`,
+        buttons: [
+          { id: "ab1", label: "🚙 Ver Inventario" },
+          { id: "ab2", label: "📅 Prueba de Manejo" },
+          { id: "ab3", label: "💰 Financiamiento" },
+        ],
+      },
+    },
+    {
+      id: "node-orch",
+      type: "orchestrator",
+      position: { x: 300, y: 320 },
+      data: {
+        label: "Orquestador Automotriz",
+        nodeType: "orchestrator",
+        noAnswerMinutes: 30,
+        intents: [
+          { id: "ai1", name: "Cotizar / Inventario", condition: "busca un vehículo o precio", isSalesBranch: true },
+          { id: "ai2", name: "Agendar Prueba de Manejo", condition: "quiere probar un vehículo", isSalesBranch: true },
+          { id: "ai3", name: "Financiamiento", condition: "pregunta por crédito o cuotas", isSalesBranch: true },
+          { id: "ai4", name: "Hablar con Asesor", condition: "requiere atención humana", isSalesBranch: false },
+        ],
+      },
+    },
+    {
+      id: "node-stage-lead",
+      type: "stage",
+      position: { x: 40, y: 480 },
+      data: { label: "Etapa Lead Vehículo", nodeType: "stage", salesStage: "Lead", description: "Interés en un vehículo" },
+    },
+    {
+      id: "node-capture",
+      type: "capture",
+      position: { x: 40, y: 600 },
+      data: {
+        label: "Perfilar Necesidad",
+        nodeType: "capture",
+        fields: [
+          { name: "var_tipo_vehiculo", type: "var", prompt: "¿Buscas un vehículo nuevo o usado?" },
+          { name: "var_modelo_interes", type: "var", prompt: "¿Qué marca o modelo te interesa?" },
+          { name: "var_presupuesto", type: "var", prompt: "¿Cuál es tu presupuesto aproximado?" },
+        ],
+      },
+    },
+    {
+      id: "node-http-inventory",
+      type: "integration",
+      position: { x: 40, y: 760 },
+      data: {
+        label: "Consulta Inventario DMS",
+        nodeType: "integration",
+        systemName: "DMS / Inventario",
+        endpoint: "https://api.dms.com/v1/inventory",
+        httpMethod: "GET",
+        saveVariable: "var_disponibilidad",
+        errorFallbackMessage: "No pude consultar el inventario en este momento. Te conecto con un asesor comercial.",
+      },
+    },
+    {
+      id: "node-closing-lead",
+      type: "closing",
+      position: { x: 40, y: 920 },
+      data: { label: "Cierre Lead Automotriz", nodeType: "closing", typificationName: "Lead Vehiculo", typificationDesc: "Prospecto interesado con datos capturados" },
+    },
+    {
+      id: "node-human",
+      type: "human",
+      position: { x: 560, y: 480 },
+      data: {
+        label: "Asesores Comerciales",
+        nodeType: "human",
+        groupName: "Ventas Concesionario",
+        schedule: "Lunes a Sábado 9:00 AM - 7:00 PM",
+        transitionMessage: "Te transferimos con un asesor comercial para continuar tu proceso.",
+      },
+    },
+    {
+      id: "node-closing-human",
+      type: "closing",
+      position: { x: 560, y: 650 },
+      data: { label: "Cierre Derivado Ventas", nodeType: "closing", typificationName: "Derivado Asesor", typificationDesc: "Atención comercial personalizada" },
+    },
+  ];
+
+  const edges: CustomCanvasEdge[] = [
+    { id: "ae1", source: "node-start", target: "node-welcome" },
+    { id: "ae2", source: "node-welcome", target: "node-orch" },
+    { id: "ae3", source: "node-orch", target: "node-stage-lead", label: "Cotizar / Inventario" },
+    { id: "ae4", source: "node-stage-lead", target: "node-capture" },
+    { id: "ae5", source: "node-capture", target: "node-http-inventory" },
+    { id: "ae6", source: "node-http-inventory", target: "node-closing-lead", label: "Disponible" },
+    { id: "ae7", source: "node-http-inventory", target: "node-human", label: "Sin stock / Revisión" },
+    { id: "ae8", source: "node-orch", target: "node-human", label: "Hablar con Asesor" },
+    { id: "ae9", source: "node-human", target: "node-closing-human" },
+  ];
+
+  return { nodes, edges };
+};
+
+const getEducacionTemplate = (clientName: string): DiagramGraph => {
+  const nodes: CustomCanvasNode[] = [
+    {
+      id: "node-start",
+      type: "start",
+      position: { x: 300, y: 50 },
+      data: { label: "Inicio WhatsApp Educación", nodeType: "start", description: "Inbound - Prospecto académico" },
+    },
+    {
+      id: "node-welcome",
+      type: "message",
+      position: { x: 300, y: 160 },
+      data: {
+        label: "Bienvenida Educación",
+        nodeType: "message",
+        messageText: `¡Hola! 🎓 Bienvenido a *${clientName}*. ¿Sobre qué programa deseas información?`,
+        buttons: [
+          { id: "eb1", label: "📚 Ver Programas" },
+          { id: "eb2", label: "💳 Becas y Costos" },
+          { id: "eb3", label: "🧑‍🏫 Hablar con Asesor" },
+        ],
+      },
+    },
+    {
+      id: "node-orch",
+      type: "orchestrator",
+      position: { x: 300, y: 320 },
+      data: {
+        label: "Orquestador Admisiones",
+        nodeType: "orchestrator",
+        noAnswerMinutes: 30,
+        intents: [
+          { id: "ei1", name: "Información de Programas", condition: "pregunta por carrera o curso", isSalesBranch: true },
+          { id: "ei2", name: "Becas y Financiamiento", condition: "pregunta por costos, becas o cuotas", isSalesBranch: true },
+          { id: "ei3", name: "Asesor de Admisiones", condition: "requiere atención humana", isSalesBranch: false },
+        ],
+      },
+    },
+    {
+      id: "node-stage-lead",
+      type: "stage",
+      position: { x: 40, y: 480 },
+      data: { label: "Etapa Lead Académico", nodeType: "stage", salesStage: "Lead", description: "Interés en un programa" },
+    },
+    {
+      id: "node-capture",
+      type: "capture",
+      position: { x: 40, y: 600 },
+      data: {
+        label: "Perfilar Prospecto",
+        nodeType: "capture",
+        fields: [
+          { name: "var_programa_interes", type: "var", prompt: "¿Qué programa o carrera te interesa?" },
+          { name: "var_modalidad", type: "var", prompt: "¿Prefieres modalidad presencial, virtual o híbrida?" },
+          { name: "custom_ultimo_grado", type: "custom", prompt: "¿Cuál es tu último grado académico aprobado?" },
+        ],
+      },
+    },
+    {
+      id: "node-http-programs",
+      type: "integration",
+      position: { x: 40, y: 760 },
+      data: {
+        label: "Consulta Oferta Académica",
+        nodeType: "integration",
+        systemName: "CRM Académico",
+        endpoint: "https://api.crmedu.com/v1/programs",
+        httpMethod: "GET",
+        saveVariable: "var_programa_detalle",
+        errorFallbackMessage: "No pude consultar la oferta ahora. Te conecto con un asesor de admisiones.",
+      },
+    },
+    {
+      id: "node-closing-lead",
+      type: "closing",
+      position: { x: 40, y: 920 },
+      data: { label: "Cierre Lead Académico", nodeType: "closing", typificationName: "Lead Academico", typificationDesc: "Prospecto interesado con datos capturados" },
+    },
+    {
+      id: "node-human",
+      type: "human",
+      position: { x: 560, y: 480 },
+      data: {
+        label: "Asesores de Admisiones",
+        nodeType: "human",
+        groupName: "Admisiones",
+        schedule: "Lunes a Viernes 8:00 AM - 6:00 PM",
+        transitionMessage: "Te transferimos con un asesor de admisiones para orientarte en tu inscripción.",
+      },
+    },
+    {
+      id: "node-closing-human",
+      type: "closing",
+      position: { x: 560, y: 650 },
+      data: { label: "Cierre Derivado Admisiones", nodeType: "closing", typificationName: "Derivado Admisiones", typificationDesc: "Atención personalizada de admisiones" },
+    },
+  ];
+
+  const edges: CustomCanvasEdge[] = [
+    { id: "ee1", source: "node-start", target: "node-welcome" },
+    { id: "ee2", source: "node-welcome", target: "node-orch" },
+    { id: "ee3", source: "node-orch", target: "node-stage-lead", label: "Información de Programas" },
+    { id: "ee4", source: "node-stage-lead", target: "node-capture" },
+    { id: "ee5", source: "node-capture", target: "node-http-programs" },
+    { id: "ee6", source: "node-http-programs", target: "node-closing-lead", label: "Disponible" },
+    { id: "ee7", source: "node-http-programs", target: "node-human", label: "No disponible / Revisión" },
+    { id: "ee8", source: "node-orch", target: "node-human", label: "Hablar con Asesor" },
+    { id: "ee9", source: "node-human", target: "node-closing-human" },
+  ];
+
+  return { nodes, edges };
 };
 
 const getEcommerceTemplate = (clientName: string): DiagramGraph => {

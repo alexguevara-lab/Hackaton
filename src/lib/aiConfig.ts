@@ -19,12 +19,19 @@ export const MODEL_OPTIONS = [
   { id: "gemini-2.5-flash", label: "Gemini 2.5 Flash" },
 ];
 
+const VALID_MODEL_IDS = MODEL_OPTIONS.map((m) => m.id);
+
+// Corrige modelos guardados que ya no existen (ej. un "gemini-3.6-pro" viejo → 404).
+function coerceModel(model?: string): string {
+  return model && VALID_MODEL_IDS.includes(model) ? model : DEFAULT_MODEL;
+}
+
 export function getAIConfig(): AIConfig {
   try {
     const raw = localStorage.getItem(AI_CONFIG_KEY);
     if (raw) {
       const parsed = JSON.parse(raw);
-      return { apiKey: parsed.apiKey || "", model: parsed.model || DEFAULT_MODEL };
+      return { apiKey: (parsed.apiKey || "").trim(), model: coerceModel(parsed.model) };
     }
   } catch {
     // config corrupta → defaults
@@ -33,7 +40,8 @@ export function getAIConfig(): AIConfig {
 }
 
 export function saveAIConfig(config: AIConfig) {
-  localStorage.setItem(AI_CONFIG_KEY, JSON.stringify(config));
+  const clean: AIConfig = { apiKey: (config.apiKey || "").trim(), model: coerceModel(config.model) };
+  localStorage.setItem(AI_CONFIG_KEY, JSON.stringify(clean));
 }
 
 /** fetch a los endpoints /api/ai/* incluyendo siempre la config de IA. */
@@ -44,4 +52,24 @@ export async function aiFetch(path: string, payload: Record<string, any>): Promi
     body: JSON.stringify({ ...payload, config: getAIConfig() }),
   });
   return res.json();
+}
+
+/** Prueba la conexión con Gemini usando la key/modelo dados (o los guardados). */
+export async function pingAI(override?: Partial<AIConfig>): Promise<{ ok: boolean; message: string }> {
+  const base = getAIConfig();
+  const config = { apiKey: (override?.apiKey ?? base.apiKey).trim(), model: coerceModel(override?.model ?? base.model) };
+  try {
+    const res = await fetch("/api/ai/ping", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ config }),
+    });
+    const data = await res.json();
+    if (res.ok && data.ok) {
+      return { ok: true, message: data.message || `Conexión correcta con ${config.model}.` };
+    }
+    return { ok: false, message: data.error || "La API no aceptó la key o el modelo." };
+  } catch {
+    return { ok: false, message: "No se pudo contactar el servidor." };
+  }
 }
