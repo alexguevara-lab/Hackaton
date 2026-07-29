@@ -47,6 +47,34 @@ app.get("/api/health", (req, res) => {
 });
 
 /**
+ * PING — valida que la key + el modelo funcionen con una llamada mínima.
+ * Lo usa el modal de Configuración IA para el botón "Probar conexión".
+ */
+app.post("/api/ai/ping", async (req, res) => {
+  try {
+    const { ai, model } = resolveAI(req.body);
+    const response = await ai.models.generateContent({
+      model,
+      contents: "Responde solo con: ok",
+    });
+    const text = (response.text || "").trim();
+    res.json({ ok: true, model, message: `Conexión correcta con ${model}. Respuesta: "${text.slice(0, 20)}"` });
+  } catch (error: any) {
+    const raw = error?.message || "Error desconocido";
+    let friendly = raw;
+    if (/api key not valid|API_KEY_INVALID|invalid.*key/i.test(raw)) {
+      friendly = "La API key no es válida. Revísala en Configuración IA o en .env.local.";
+    } else if (/not found|404|is not found for API/i.test(raw)) {
+      friendly = "El modelo seleccionado no existe para esta key. Elige otro modelo.";
+    } else if (/quota|RESOURCE_EXHAUSTED|429/i.test(raw)) {
+      friendly = "Se agotó la cuota de la API key.";
+    }
+    console.error("Error in /api/ai/ping:", raw);
+    res.status(400).json({ ok: false, error: friendly });
+  }
+});
+
+/**
  * 1. ANALYZE CONTEXT
  * Analyzes uploaded documents (briefs, catalogs, FAQs) and generates context summary + kick-off items checklist (Â§6).
  */
@@ -612,4 +640,3 @@ if (!process.env.VERCEL) {
 }
 
 export default app;
-
