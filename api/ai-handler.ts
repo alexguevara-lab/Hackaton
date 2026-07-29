@@ -12,6 +12,16 @@ const PORT = 3000;
 
 app.use(express.json({ limit: "20mb" }));
 
+// Vercel enruta /api/* a esta función fija con la ruta original en `path`.
+// Restauramos esa ruta antes de que Express evalúe los endpoints de IA.
+app.use((req, _res, next) => {
+  const requestedPath = req.query?.path;
+  if (req.path === "/api/ai-handler" && typeof requestedPath === "string") {
+    req.url = `/api/${requestedPath}`;
+  }
+  next();
+});
+
 const DEFAULT_MODEL = "gemini-3.6-flash";
 
 // Initialize Gemini Client. Prioriza la key enviada desde la UI (config del proyecto);

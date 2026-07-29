@@ -2,7 +2,7 @@
   "cleanUrls": true,
   "routes": [
     { "handle": "filesystem" },
-    { "src": "/api/(.*)", "dest": "/api/[...path].ts" },
+    { "src": "/api/(.*)", "dest": "/api/ai-handler?path=$1" },
     { "src": "/(.*)", "dest": "/index.html" }
   ]
 }
