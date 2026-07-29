@@ -284,7 +284,7 @@ export const DocumentsView: React.FC<DocumentsViewProps> = ({
               type="file"
               multiple
               className="hidden"
-              accept=".txt,.md,.csv,.json,.html,.docx,.xlsx,.xls,.xlsm"
+              accept=".txt,.md,.csv,.json,.html,.docx,.xlsx,.xls,.xlsm,.pdf,application/pdf"
               onChange={(e) => {
                 if (e.target.files) handleFiles(e.target.files);
                 e.target.value = "";
@@ -297,7 +297,7 @@ export const DocumentsView: React.FC<DocumentsViewProps> = ({
               {isExtracting ? "Extrayendo texto..." : "Adjuntar documentos (SOW, Baseline, briefs)"}
             </p>
             <p className="text-xs text-ink-soft max-w-xs">
-              Arrastra o haz clic. Se extrae texto de <b>.docx, .xlsx</b> y archivos de texto automáticamente.
+              Arrastra o haz clic. Se extrae texto de <b>.pdf, .docx, .xlsx</b> y archivos de texto automáticamente.
             </p>
           </div>
 

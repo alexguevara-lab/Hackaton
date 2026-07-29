@@ -8,6 +8,8 @@ const TEXT_EXTENSIONS = ["txt", "md", "csv", "json", "html"];
 const MAX_CHARS = 60000; // tope para no saturar el prompt de la IA
 const LARGE_FILE_BYTES = 12 * 1024 * 1024; // 12 MB → xlsx pesado (ej. Baseline)
 
+const MAX_PDF_PAGES = 100;
+
 export interface ExtractResult {
   text: string;
   note?: string; // aviso cuando la extracción fue parcial
@@ -61,12 +63,61 @@ async function extractText(file: File): Promise<ExtractResult> {
   return { text: text.slice(0, MAX_CHARS) };
 }
 
+async function extractPdf(file: File): Promise<ExtractResult> {
+  const [{ getDocument, GlobalWorkerOptions }, { default: pdfWorkerUrl }] = await Promise.all([
+    import("pdfjs-dist"),
+    import("pdfjs-dist/build/pdf.worker.min.mjs?url"),
+  ]);
+  GlobalWorkerOptions.workerSrc = pdfWorkerUrl;
+
+  const buffer = await file.arrayBuffer();
+  const pdf = await getDocument({ data: new Uint8Array(buffer) }).promise;
+  const pagesToRead = Math.min(pdf.numPages, MAX_PDF_PAGES);
+  const parts: string[] = [];
+  let extractedChars = 0;
+
+  for (let pageNumber = 1; pageNumber <= pagesToRead && extractedChars < MAX_CHARS; pageNumber += 1) {
+    const page = await pdf.getPage(pageNumber);
+    const content = await page.getTextContent();
+    const pageText = content.items
+      .map((item) => ("str" in item ? item.str : ""))
+      .filter(Boolean)
+      .join(" ")
+      .trim();
+
+    if (pageText) {
+      const remaining = MAX_CHARS - extractedChars;
+      const section = `### Página ${pageNumber}\n${pageText.slice(0, remaining)}`;
+      parts.push(section);
+      extractedChars += section.length;
+    }
+  }
+
+  const text = parts.join("\n\n");
+  if (!text) {
+    return {
+      text: "",
+      note: "El PDF no contiene texto seleccionable. Si es un escaneo, aplícale OCR o pega el contenido manualmente.",
+    };
+  }
+
+  const note =
+    pdf.numPages > pagesToRead
+      ? `PDF de ${pdf.numPages} páginas. Se analizaron las primeras ${pagesToRead} para mantener el contexto de IA manejable.`
+      : extractedChars >= MAX_CHARS
+      ? `El texto del PDF se recortó a ${MAX_CHARS.toLocaleString()} caracteres para el análisis de IA.`
+      : undefined;
+
+  return { text, note };
+}
+
 /** Devuelve el texto analizable de un archivo, o cadena vacía si el formato no se soporta. */
 export async function extractDocumentText(file: File): Promise<ExtractResult> {
   const e = ext(file.name);
   try {
     if (e === "docx") return await extractDocx(file);
     if (e === "xlsx" || e === "xlsm" || e === "xls") return await extractXlsx(file);
+    if (e === "pdf" || file.type === "application/pdf") return await extractPdf(file);
     if (TEXT_EXTENSIONS.includes(e) || file.type.startsWith("text/")) return await extractText(file);
   } catch (err) {
     console.error("extractDocumentText failed for", file.name, err);
