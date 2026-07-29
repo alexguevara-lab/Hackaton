@@ -1,3 +1,8 @@
 {
-  "cleanUrls": true
+  "cleanUrls": true,
+  "routes": [
+    { "handle": "filesystem" },
+    { "src": "/api/(.*)", "dest": "/api/[...path].ts" },
+    { "src": "/(.*)", "dest": "/index.html" }
+  ]
 }
