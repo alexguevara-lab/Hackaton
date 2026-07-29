@@ -90,6 +90,53 @@ const nodeMiniMapColor = (n: { type?: string }): string => {
   }
 };
 
+// Los nodos agregados desde el kick-off representan un acuerdo dentro de un
+// flujo existente; nunca deben aparecer como una isla en el canvas.
+const preferredAnchorTypes: Record<CustomNodeType, CustomNodeType[]> = {
+  start: [],
+  message: ["orchestrator", "message", "decision", "start", "capture", "integration"],
+  orchestrator: ["message", "start", "decision", "orchestrator"],
+  capture: ["orchestrator", "message", "decision", "integration"],
+  integration: ["capture", "orchestrator", "message", "decision"],
+  decision: ["orchestrator", "message", "capture", "integration"],
+  human: ["orchestrator", "decision", "integration", "message", "capture"],
+  closing: ["integration", "capture", "human", "message", "decision", "orchestrator", "stage"],
+  stage: ["orchestrator", "message", "capture"],
+  jump: ["message", "decision", "orchestrator"],
+  note: ["message", "orchestrator", "capture", "integration"],
+};
+
+const getLogicalAnchor = (
+  canvasNodes: CustomCanvasNode[],
+  canvasEdges: CustomCanvasEdge[],
+  type: CustomNodeType
+) => {
+  const canContinueFrom = (node: CustomCanvasNode) => node.type !== "closing";
+
+  const candidates = canvasNodes
+    .filter(
+      (node) => canContinueFrom(node) && preferredAnchorTypes[type].includes(node.type)
+    )
+    .sort((a, b) => b.position.y - a.position.y || b.position.x - a.position.x);
+  const isTerminal = (node: CustomCanvasNode) => !canvasEdges.some((edge) => edge.source === node.id);
+
+  return candidates.find(isTerminal) || candidates[0] || canvasNodes.find(canContinueFrom);
+};
+
+const getConnectedNodePosition = (anchor: CustomCanvasNode, canvasNodes: CustomCanvasNode[]) => {
+  const position = { x: anchor.position.x, y: anchor.position.y + 180 };
+  // Mantiene el nuevo paso debajo del ancla y evita cubrir una tarjeta ya existente.
+  while (
+    canvasNodes.some(
+      (node) =>
+        Math.abs(node.position.x - position.x) < 180 && Math.abs(node.position.y - position.y) < 120
+    )
+  ) {
+    position.y += 180;
+  }
+  return position;
+};
+
 export default function App() {
   const [projects, setProjects] = useState<Project[]>([]);
   const [currentProject, setCurrentProject] = useState<Project | undefined>();
@@ -284,18 +331,29 @@ export default function App() {
   );
 
   // Add New Custom Node to Canvas
-  const handleAddNode = (type: CustomNodeType, customLabel?: string, extraProps?: any) => {
+  const handleAddNode = (
+    type: CustomNodeType,
+    customLabel?: string,
+    extraProps?: any,
+    connectToFlow = false
+  ) => {
     if (!currentProject) return;
     hideSidebarOnEdit();
 
     const newNodeId = `node-${Date.now()}`;
-    const xPos = Math.floor(Math.random() * 200) + 200;
-    const yPos = Math.floor(Math.random() * 200) + 150;
+    const anchor = connectToFlow ? getLogicalAnchor(nodes, edges, type) : undefined;
+    if (connectToFlow && !anchor) {
+      window.alert("No se encontró un paso válido del flujo para conectar este nodo.");
+      return;
+    }
+    const position = anchor
+      ? getConnectedNodePosition(anchor, nodes)
+      : { x: Math.floor(Math.random() * 200) + 200, y: Math.floor(Math.random() * 200) + 150 };
 
     const newNode: CustomCanvasNode = {
       id: newNodeId,
       type,
-      position: { x: xPos, y: yPos },
+      position,
       data: {
         label: customLabel || `Nuevo ${type}`,
         nodeType: type,
@@ -325,6 +383,16 @@ export default function App() {
     };
 
     setNodes((nds) => [...nds, newNode]);
+    if (anchor) {
+      const newEdge: CustomCanvasEdge = {
+        id: `e-kickoff-${anchor.id}-${newNodeId}`,
+        source: anchor.id,
+        target: newNodeId,
+        animated: true,
+        style: { stroke: "#FF5A00", strokeWidth: 2 },
+      };
+      setEdges((eds) => addEdge(newEdge, eds) as CustomCanvasEdge[]);
+    }
     setSelectedNode(newNode);
   };
 
@@ -344,11 +412,43 @@ export default function App() {
   // Aplica operaciones de grafo propuestas por el Asistente IA
   const handleApplyOperations = useCallback(
     (ops: GraphOperation[]) => {
+      // Una respuesta de IA no puede insertar un nodo aislado: todo nodo nuevo
+      // (salvo el único inicio) debe participar en una arista de la misma propuesta.
+      const proposedEdges = ops
+        .filter((operation) => operation.op === "add_edge" && operation.edge?.source && operation.edge?.target)
+        .map((operation) => ({ source: operation.edge.source as string, target: operation.edge.target as string }));
+      const reachableNodeIds = new Set(nodes.map((node) => node.id));
+
+      // Propaga la conectividad desde el grafo actual. Así no basta con que dos
+      // nodos nuevos se conecten entre sí: al menos uno debe enlazarse al flujo.
+      let hasNewReachableNode = true;
+      while (hasNewReachableNode) {
+        hasNewReachableNode = false;
+        proposedEdges.forEach((edge) => {
+          if (reachableNodeIds.has(edge.source) && !reachableNodeIds.has(edge.target)) {
+            reachableNodeIds.add(edge.target);
+            hasNewReachableNode = true;
+          }
+          if (reachableNodeIds.has(edge.target) && !reachableNodeIds.has(edge.source)) {
+            reachableNodeIds.add(edge.source);
+            hasNewReachableNode = true;
+          }
+        });
+      }
+
       ops.forEach((operation) => {
         switch (operation.op) {
           case "add_node": {
             const n = operation.node;
             if (!n || !n.id || !n.type) return;
+            if (n.type === "start" && nodes.length > 0) {
+              console.warn("Se descartó un segundo nodo de inicio propuesto por IA.");
+              return;
+            }
+            if (n.type !== "start" && !reachableNodeIds.has(n.id)) {
+              console.warn(`Se descartó el nodo IA aislado: ${n.id}`);
+              return;
+            }
             const newNode: CustomCanvasNode = {
               id: n.id,
               type: n.type,
@@ -407,7 +507,7 @@ export default function App() {
         }
       });
     },
-    [setNodes, setEdges]
+    [nodes, setNodes, setEdges]
   );
 
   // Select Project → abre el workspace en Canvas
@@ -745,7 +845,9 @@ export default function App() {
                   project={currentProject}
                   kickoffItems={kickoffItems}
                   onUpdateKickoffItems={(updated) => setKickoffItems(updated)}
-                  onInsertNodeFromKickoff={(type, label, props) => handleAddNode(type, label, props)}
+                  onInsertNodeFromKickoff={(type, label, props) =>
+                    handleAddNode(type, label, props, true)
+                  }
                 />
               </div>
             )}

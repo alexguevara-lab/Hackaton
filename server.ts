@@ -452,7 +452,8 @@ start, message, orchestrator, capture, integration, decision, human, closing, st
 }
 
 - Prefiere update_node y add_edge sobre recrear nodos.
-- Al agregar nodos, conéctalos con add_edge y ubícalos sin encimar (mira las posiciones actuales).
+- PROHIBIDO crear nodos huérfanos: cada add_node debe incluir add_edge que lo conecte de forma alcanzable al flujo existente; no basta con conectar nodos nuevos entre sí. No conectes después de un closing.
+- Ubica los nodos nuevos sin encimarlos (mira las posiciones actuales).
 - No borres nodos con contenido válido; corrige lo señalado por los hallazgos.
 `;
 
@@ -602,8 +603,9 @@ ${industryContext ? JSON.stringify(industryContext, null, 2) : "Sin perfil espec
 }
 
 - "operations" es opcional: inclúyelo SOLO cuando el usuario pida o acepte cambios al flujo. Si solo pregunta, devuelve operations: [].
+- Antes de crear un nodo, prefiere update_node si la respuesta solo configura un paso existente (por ejemplo, no_answer_minutes del Smarton).
+- PROHIBIDO crear nodos huérfanos: cada add_node (excepto el único start) DEBE incluir en la misma respuesta al menos un add_edge válido que lo conecte con el flujo actual. Elige una inserción lógica según el tipo: no conectes después de un closing, conserva una ruta alcanzable desde start y haz que la rama continúe hacia un cierre o asesor cuando aplique.
 - En add_node incluye SIEMPRE data.nodeType igual al type, y una position que no se encime con nodos existentes (mira las posiciones actuales del grafo).
-- Al agregar nodos conéctalos con add_edge para no dejar nodos sueltos.
 - En update_node envía SOLO los campos de data que cambian (se hace merge).
 - Explica en "reply" qué cambios aplicaste y por qué.
 `;
