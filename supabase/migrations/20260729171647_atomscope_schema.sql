@@ -7,7 +7,12 @@ create table public.profiles (
   id uuid primary key references auth.users(id) on delete cascade,
   full_name text not null default '',
   role text not null default 'Onboarding Manager'
-    check (role in ('Onboarding Manager', 'Bot Architect', 'Customer Success Lead')),
+    check (role in (
+      'Administrator',
+      'Onboarding Manager',
+      'Bot Architect',
+      'Customer Success Lead'
+    )),
   avatar_url text,
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()
@@ -135,7 +140,7 @@ begin
   values (
     new.id,
     coalesce(new.raw_user_meta_data ->> 'full_name', ''),
-    coalesce(new.raw_user_meta_data ->> 'role', 'Onboarding Manager')
+    'Onboarding Manager'
   );
   return new;
 end;
