@@ -1,7 +1,6 @@
 import express from "express";
 import path from "path";
 import { GoogleGenAI, Type } from "@google/genai";
-import { createServer as createViteServer } from "vite";
 import dotenv from "dotenv";
 
 // Carga .env.local (y .env) para ejecución local; en AI Studio el entorno inyecta las claves.
@@ -589,6 +588,7 @@ ${history}
 // --- VITE / STATIC SERVING ---
 async function start() {
   if (process.env.NODE_ENV !== "production") {
+    const { createServer: createViteServer } = await import("vite");
     const vite = await createViteServer({
       server: { middlewareMode: true },
       appType: "spa",
