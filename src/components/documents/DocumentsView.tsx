@@ -21,7 +21,10 @@ import {
   saveProjectAnalysis,
 } from "../../lib/storage";
 import { extractDocumentText, detectRequiredDoc, REQUIRED_DOCS } from "../../lib/documentExtract";
-import { BASE_QUESTIONS } from "../../lib/baseQuestions";
+import {
+  getAnalysisQuestionsForIndustry,
+  getIndustryQuestionContext,
+} from "../../lib/industryQuestions";
 import { aiFetch, getAIConfig } from "../../lib/aiConfig";
 
 interface DocumentsViewProps {
@@ -102,7 +105,10 @@ export const DocumentsView: React.FC<DocumentsViewProps> = ({
         clientName: project.client_name,
         industry: project.industry,
         description: project.description,
-        baseQuestions: BASE_QUESTIONS,
+        // Solo las preguntas de mapa entran al kick-off inmediato. El perfil
+        // completo conserva las preguntas técnicas para que la IA las use de contexto.
+        baseQuestions: getAnalysisQuestionsForIndustry(project.industry),
+        industryContext: getIndustryQuestionContext(project.industry),
       });
 
       if (data.error) {

@@ -3,6 +3,7 @@ import { X, Send, Sparkles, Bot, User, Wand2 } from "lucide-react";
 import { Project, KickoffItem, DiagramGraph } from "../../types";
 import { getDocuments } from "../../lib/storage";
 import { aiFetch } from "../../lib/aiConfig";
+import { getIndustryQuestionContext } from "../../lib/industryQuestions";
 
 export interface GraphOperation {
   op: "add_node" | "update_node" | "delete_node" | "add_edge" | "delete_edge";
@@ -63,6 +64,7 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({
         project,
         graph,
         kickoffItems,
+        industryContext: getIndustryQuestionContext(project.industry),
         documents: getDocuments(project.id).map((d) => ({
           file_name: d.file_name,
           extracted_text: d.extracted_text,

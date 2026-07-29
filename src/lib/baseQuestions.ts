@@ -21,6 +21,10 @@ export interface BaseQuestion {
     | "measurement";
   category: KickoffCategory;
   question: string;
+  /** Metadatos opcionales para catálogos contextuales por industria. */
+  section?: string;
+  phase?: "map" | "spec";
+  priority?: "high" | "medium" | "low";
 }
 
 export const BASE_QUESTIONS: BaseQuestion[] = [

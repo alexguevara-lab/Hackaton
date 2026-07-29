@@ -9,6 +9,8 @@ import {
   Stethoscope,
   Landmark,
   Home,
+  CarFront,
+  GraduationCap,
   ArrowRight,
   MoreVertical,
   Trash2,
@@ -81,6 +83,10 @@ export const ProjectList: React.FC<ProjectListProps> = ({
         return { label: "Financiero", icon: <Landmark className="w-3 h-3" />, color: "bg-success-soft text-success border-success/30" };
       case "inmobiliario":
         return { label: "Inmobiliario", icon: <Home className="w-3 h-3" />, color: "bg-warning-soft text-warning border-warning/30" };
+      case "automotriz":
+        return { label: "Automotriz", icon: <CarFront className="w-3 h-3" />, color: "bg-primary-soft text-primary border-primary/30" };
+      case "educacion":
+        return { label: "Educación", icon: <GraduationCap className="w-3 h-3" />, color: "bg-success-soft text-success border-success/30" };
       default:
         return { label: "General", icon: <Building2 className="w-3 h-3" />, color: "bg-surface text-ink border-line" };
     }
@@ -123,7 +129,7 @@ export const ProjectList: React.FC<ProjectListProps> = ({
 
         <div className="flex items-center gap-2 overflow-x-auto">
           <Filter className="w-3.5 h-3.5 text-ink-soft shrink-0" />
-          {["all", "ecommerce", "salud", "financiero", "inmobiliario"].map((ind) => (
+          {["all", "ecommerce", "salud", "financiero", "inmobiliario", "automotriz", "educacion"].map((ind) => (
             <button
               key={ind}
               onClick={() => setSelectedIndustry(ind)}
@@ -256,6 +262,8 @@ export const ProjectList: React.FC<ProjectListProps> = ({
                     <option value="salud">Salud / Médica</option>
                     <option value="financiero">Financiero / Fintech</option>
                     <option value="inmobiliario">Inmobiliario / Constructora</option>
+                    <option value="automotriz">Automotriz / Concesionario</option>
+                    <option value="educacion">Educación / Admisiones</option>
                     <option value="otro">Otro</option>
                   </select>
                 </div>

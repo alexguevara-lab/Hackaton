@@ -52,7 +52,7 @@ app.get("/api/health", (req, res) => {
  */
 app.post("/api/ai/analyze-context", async (req, res) => {
   try {
-    const { documentTexts, clientName, industry, description, baseQuestions } = req.body;
+    const { documentTexts, clientName, industry, description, baseQuestions, industryContext } = req.body;
     const { ai, model } = resolveAI(req.body);
 
     const prompt = `
@@ -70,6 +70,12 @@ Analiza el contexto de la empresa "${clientName || "Cliente"}" (Industria: ${ind
 
 Documentos adjuntos / Contexto extraído:
 ${documentTexts && documentTexts.length > 0 ? documentTexts.join("\n\n---\n\n") : "No se subieron documentos aún."}
+
+## Perfil conceptual de la industria
+${industryContext ? JSON.stringify(industryContext, null, 2) : "Sin perfil específico; usa la industria indicada."}
+
+Usa este perfil para interpretar los documentos y detectar restricciones, decisiones y rutas propias de la industria.
+No conviertas automáticamente preguntas de fase "spec" en pendientes del kick-off: son contexto para la ficha técnica posterior.
 
 ## Base de preguntas del motor (obligatoria)
 Evalúa CADA UNA de estas preguntas base contra los documentos. Este es el motor de preguntas: no inventes
@@ -498,7 +504,7 @@ Genera un JSON válido con la lista de nodes y edges de React Flow:
  */
 app.post("/api/ai/chat", async (req, res) => {
   try {
-    const { messages, project, graph, kickoffItems, documents } = req.body;
+    const { messages, project, graph, kickoffItems, documents, industryContext } = req.body;
     const { ai, model } = resolveAI(req.body);
 
     const history = (messages || [])
@@ -528,6 +534,11 @@ ${
 
 ## Historial de conversación
 ${history}
+
+## Perfil conceptual de la industria
+${industryContext ? JSON.stringify(industryContext, null, 2) : "Sin perfil específico; usa la industria indicada."}
+
+Úsalo como guía de decisiones y preguntas relevantes. No asumas que una respuesta está confirmada solo porque aparezca en el perfil: prevalecen los documentos y acuerdos del proyecto.
 
 ## Tipos de nodo disponibles (campo "type")
 - "start": Inicio inbound WhatsApp (solo uno)
