@@ -110,6 +110,7 @@ create index diagram_versions_project_id_idx on public.diagram_versions(project_
 create index documents_project_id_idx on public.documents(project_id);
 create index kickoff_items_project_id_idx on public.kickoff_items(project_id);
 create index comments_diagram_id_idx on public.comments(diagram_id);
+create index comments_author_id_idx on public.comments(author_id);
 create index artifacts_project_id_idx on public.artifacts(project_id);
 
 create function public.set_updated_at()
@@ -361,8 +362,10 @@ grant usage on schema public to authenticated;
 grant select, insert, update, delete on all tables in schema public to authenticated;
 grant execute on function public.is_project_member(uuid) to authenticated;
 grant execute on function public.can_edit_project(uuid) to authenticated;
-revoke execute on function public.handle_new_user() from public;
-revoke execute on function public.add_project_owner() from public;
+revoke execute on function public.handle_new_user() from public, anon;
+revoke execute on function public.add_project_owner() from public, anon;
+revoke execute on function public.is_project_member(uuid) from public, anon;
+revoke execute on function public.can_edit_project(uuid) from public, anon;
 
 insert into storage.buckets (id, name, public, file_size_limit, allowed_mime_types)
 values (
@@ -389,7 +392,7 @@ create policy "Editors can upload project files"
   on storage.objects for insert to authenticated
   with check (
     bucket_id = 'project-documents'
-    and owner_id = (select auth.uid())
+    and owner_id = (select auth.uid()::text)
     and public.can_edit_project((storage.foldername(name))[1]::uuid)
   );
 create policy "Editors can update project files"
