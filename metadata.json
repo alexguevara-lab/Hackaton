@@ -1,0 +1,6 @@
+{
+  "name": "AtomScope",
+  "description": "Visual chatbot canvas builder for live onboarding kickoff sessions, AI context analysis, gap auditing, and automatic Atom technical spec & agreement summary generation.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

@@ -1,0 +1,56 @@
+@import "tailwindcss";
+
+/*
+ * Paleta corporativa AtomScope
+ * Genera utilidades: bg-primary, text-primary, border-line, bg-surface,
+ * text-heading, text-ink, text-ink-soft, bg-primary-soft, text-success, etc.
+ */
+@theme {
+  --color-primary: #ff5a00;
+  --color-primary-hover: #e65100;
+  --color-primary-soft: #fff0e8;
+  --color-heading: #292929;
+  --color-surface: #f7f7f7;
+  --color-card: #ffffff;
+  --color-line: #e5e5e5;
+  --color-ink: #222222;
+  --color-ink-soft: #666666;
+  --color-success: #16a34a;
+  --color-success-soft: #ecfdf3;
+  --color-warning: #ff8a00;
+  --color-warning-soft: #fff4e5;
+  --color-danger: #dc2626;
+  --color-danger-soft: #fef2f2;
+}
+
+/* Ajustes de React Flow al tema claro */
+.react-flow__controls {
+  background: var(--color-card) !important;
+  border: 1px solid var(--color-line) !important;
+  border-radius: 0.75rem;
+  overflow: hidden;
+  box-shadow: 0 4px 12px rgb(0 0 0 / 0.06) !important;
+}
+.react-flow__controls-button {
+  background: var(--color-card) !important;
+  border-bottom: 1px solid var(--color-line) !important;
+  color: var(--color-ink-soft) !important;
+}
+.react-flow__controls-button:hover {
+  background: var(--color-primary-soft) !important;
+  color: var(--color-primary) !important;
+}
+.react-flow__minimap {
+  background: var(--color-card) !important;
+  border: 1px solid var(--color-line) !important;
+  border-radius: 0.75rem;
+}
+.react-flow__edge-path {
+  stroke: #b8b8b8;
+}
+.react-flow__edge.selected .react-flow__edge-path {
+  stroke: var(--color-primary);
+}
+.react-flow__attribution {
+  display: none;
+}
