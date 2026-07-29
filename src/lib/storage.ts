@@ -3,6 +3,8 @@ import {
   DocumentItem,
   KickoffItem,
   DiagramVersion,
+  VersionStatus,
+  ProjectAnalysis,
   CommentItem,
   Artifact,
   IndustryType,
@@ -16,6 +18,7 @@ const STORAGE_KEYS = {
   DIAGRAMS: "atomscope_diagrams_v1",
   COMMENTS: "atomscope_comments_v1",
   ARTIFACTS: "atomscope_artifacts_v1",
+  ANALYSIS: "atomscope_analysis_v1",
   CURRENT_PROJECT: "atomscope_current_project_id",
   AUTH_USER: "atomscope_auth_user_v1",
 };
@@ -78,6 +81,7 @@ export function initStorage() {
       label: "v1 - Diagrama Kickoff Inicial",
       graph: getTemplateForIndustry(p.industry, p.client_name),
       is_current: true,
+      status: "draft",
       created_at: new Date().toISOString(),
     }));
 
@@ -186,6 +190,7 @@ export function saveProject(project: Project): Project {
       label: "v1 - Diagrama Inicial Kickoff",
       graph: getTemplateForIndustry(project.industry, project.client_name),
       is_current: true,
+      status: "draft",
       created_at: new Date().toISOString(),
     };
     saveDiagramVersion(v1);
@@ -210,6 +215,7 @@ export function deleteProject(id: string) {
   filterOut(STORAGE_KEYS.KICKOFF, "project_id");
   filterOut(STORAGE_KEYS.DOCUMENTS, "project_id");
   filterOut(STORAGE_KEYS.ARTIFACTS, "project_id");
+  filterOut(STORAGE_KEYS.ANALYSIS, "project_id");
 }
 
 export function getCurrentProjectId(): string {
@@ -268,10 +274,51 @@ export function createNewVersion(projectId: string, label?: string): DiagramVers
     label: label || `v${nextVer} - Iteración Kick-off`,
     graph: current ? JSON.parse(JSON.stringify(current.graph)) : getTemplateForIndustry("ecommerce", "Cliente"),
     is_current: true,
+    status: "draft",
     created_at: new Date().toISOString(),
   };
 
   return saveDiagramVersion(newVer);
+}
+
+// Cambia el estatus de una versión (borrador | en revisión | aprobado).
+export function setVersionStatus(
+  versionId: string,
+  status: VersionStatus,
+  approvedBy?: string
+): DiagramVersion | undefined {
+  const raw = localStorage.getItem(STORAGE_KEYS.DIAGRAMS);
+  const all: DiagramVersion[] = raw ? JSON.parse(raw) : [];
+  const idx = all.findIndex((d) => d.id === versionId);
+  if (idx < 0) return undefined;
+
+  all[idx] = {
+    ...all[idx],
+    status,
+    approved_at: status === "approved" ? new Date().toISOString() : undefined,
+    approved_by: status === "approved" ? approvedBy : undefined,
+  };
+  localStorage.setItem(STORAGE_KEYS.DIAGRAMS, JSON.stringify(all));
+  return all[idx];
+}
+
+// --- PROJECT ANALYSIS (persistido) ---
+
+export function getProjectAnalysis(projectId: string): ProjectAnalysis | undefined {
+  initStorage();
+  const raw = localStorage.getItem(STORAGE_KEYS.ANALYSIS);
+  const all: ProjectAnalysis[] = raw ? JSON.parse(raw) : [];
+  return all.find((a) => a.project_id === projectId);
+}
+
+export function saveProjectAnalysis(analysis: ProjectAnalysis): ProjectAnalysis {
+  initStorage();
+  const raw = localStorage.getItem(STORAGE_KEYS.ANALYSIS);
+  let all: ProjectAnalysis[] = raw ? JSON.parse(raw) : [];
+  all = all.filter((a) => a.project_id !== analysis.project_id);
+  all.unshift(analysis);
+  localStorage.setItem(STORAGE_KEYS.ANALYSIS, JSON.stringify(all));
+  return analysis;
 }
 
 // --- DOCUMENTS ---

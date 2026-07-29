@@ -12,21 +12,21 @@ import {
   Map,
   FileCode,
 } from "lucide-react";
-import { Project, DocumentItem, KickoffItem } from "../../types";
-import { getDocuments, saveDocument, deleteDocument } from "../../lib/storage";
+import { Project, DocumentItem, KickoffItem, ProjectAnalysis } from "../../types";
+import {
+  getDocuments,
+  saveDocument,
+  deleteDocument,
+  getProjectAnalysis,
+  saveProjectAnalysis,
+} from "../../lib/storage";
 import { extractDocumentText, detectRequiredDoc, REQUIRED_DOCS } from "../../lib/documentExtract";
-import { aiFetch } from "../../lib/aiConfig";
+import { BASE_QUESTIONS } from "../../lib/baseQuestions";
+import { aiFetch, getAIConfig } from "../../lib/aiConfig";
 
 interface DocumentsViewProps {
   project: Project;
   onKickoffItemsGenerated: (items: KickoffItem[], summary?: string) => void;
-}
-
-interface AnalysisResult {
-  summary?: string;
-  scopeSummary?: string;
-  mapReadiness?: { ready: boolean; missing: string[] };
-  specReadiness?: { ready: boolean; missing: string[] };
 }
 
 export const DocumentsView: React.FC<DocumentsViewProps> = ({
@@ -38,7 +38,9 @@ export const DocumentsView: React.FC<DocumentsViewProps> = ({
   const [pastedName, setPastedName] = useState("");
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [isExtracting, setIsExtracting] = useState(false);
-  const [analysis, setAnalysis] = useState<AnalysisResult | null>(null);
+  const [analysis, setAnalysis] = useState<ProjectAnalysis | null>(
+    getProjectAnalysis(project.id) || null
+  );
   const [isDragOver, setIsDragOver] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -100,35 +102,53 @@ export const DocumentsView: React.FC<DocumentsViewProps> = ({
         clientName: project.client_name,
         industry: project.industry,
         description: project.description,
+        baseQuestions: BASE_QUESTIONS,
       });
 
       if (data.error) {
-        setAnalysis({ summary: `⚠️ Error de IA: ${data.error}` });
+        setAnalysis({
+          project_id: project.id,
+          summary: `⚠️ Error de IA: ${data.error}`,
+          generatedAt: new Date().toISOString(),
+        });
         return;
       }
 
-      setAnalysis({
+      // Persistir el análisis para regenerarlo o reutilizarlo después.
+      const persisted: ProjectAnalysis = {
+        project_id: project.id,
         summary: data.summary,
         scopeSummary: data.scopeSummary,
+        detectedTone: data.detectedTone,
+        detectedGoal: data.detectedGoal,
         mapReadiness: data.mapReadiness,
         specReadiness: data.specReadiness,
-      });
+        generatedAt: new Date().toISOString(),
+        model: getAIConfig().model,
+        documentNames: docsWithText.map((d) => d.file_name),
+      };
+      saveProjectAnalysis(persisted);
+      setAnalysis(persisted);
 
       if (data.kickoffItems && Array.isArray(data.kickoffItems)) {
         const newItems: KickoffItem[] = data.kickoffItems.map((item: any, idx: number) => ({
-          id: `k-ai-${Date.now()}-${idx}`,
+          id: item.baseId || `k-ai-${Date.now()}-${idx}`,
           project_id: project.id,
           category: item.category || "Generales",
           question: item.question,
           answer: item.answer || "",
-          status: item.answer ? "answered" : "pending",
+          status: item.status === "answered" || item.answer ? "answered" : "pending",
           source: "ai",
         }));
         onKickoffItemsGenerated(newItems, data.summary);
       }
     } catch (err) {
       console.error("Failed to analyze documents", err);
-      setAnalysis({ summary: "⚠️ No se pudo conectar con el servidor de IA." });
+      setAnalysis({
+        project_id: project.id,
+        summary: "⚠️ No se pudo conectar con el servidor de IA.",
+        generatedAt: new Date().toISOString(),
+      });
     } finally {
       setIsAnalyzing(false);
     }
@@ -160,7 +180,11 @@ export const DocumentsView: React.FC<DocumentsViewProps> = ({
           >
             <Sparkles className={`w-4 h-4 ${isAnalyzing ? "animate-spin" : ""}`} />
             <span>
-              {isAnalyzing ? "Analizando con IA..." : `Analizar contexto (${docsWithText.length} docs)`}
+              {isAnalyzing
+                ? "Analizando con IA..."
+                : analysis && !analysis.summary?.startsWith("⚠️")
+                ? `Regenerar análisis (${docsWithText.length} docs)`
+                : `Analizar contexto (${docsWithText.length} docs)`}
             </span>
           </button>
         </div>
@@ -204,7 +228,13 @@ export const DocumentsView: React.FC<DocumentsViewProps> = ({
           <div className="space-y-3">
             {(analysis.scopeSummary || analysis.summary) && (
               <div className="p-4 rounded-xl bg-primary-soft border border-line">
-                <p className="text-xs font-bold text-heading mb-1">Resumen del alcance (SOW)</p>
+                <div className="flex items-center justify-between mb-1">
+                  <p className="text-xs font-bold text-heading">Resumen del alcance (SOW)</p>
+                  <span className="text-[10px] text-ink-soft">
+                    Análisis guardado · {new Date(analysis.generatedAt).toLocaleString()}
+                    {analysis.model ? ` · ${analysis.model}` : ""}
+                  </span>
+                </div>
                 <p className="text-xs text-ink leading-relaxed whitespace-pre-wrap">
                   {analysis.scopeSummary || analysis.summary}
                 </p>

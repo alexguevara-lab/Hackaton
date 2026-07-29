@@ -53,7 +53,7 @@ app.get("/api/health", (req, res) => {
  */
 app.post("/api/ai/analyze-context", async (req, res) => {
   try {
-    const { documentTexts, clientName, industry, description } = req.body;
+    const { documentTexts, clientName, industry, description, baseQuestions } = req.body;
     const { ai, model } = resolveAI(req.body);
 
     const prompt = `
@@ -72,6 +72,17 @@ Analiza el contexto de la empresa "${clientName || "Cliente"}" (Industria: ${ind
 Documentos adjuntos / Contexto extraído:
 ${documentTexts && documentTexts.length > 0 ? documentTexts.join("\n\n---\n\n") : "No se subieron documentos aún."}
 
+## Base de preguntas del motor (obligatoria)
+Evalúa CADA UNA de estas preguntas base contra los documentos. Este es el motor de preguntas: no inventes
+preguntas arbitrarias, parte de esta base y complétala.
+${baseQuestions && baseQuestions.length ? JSON.stringify(baseQuestions, null, 2) : "(sin base recibida; usa el checklist §6)"}
+
+Para cada pregunta base:
+- Si los documentos la responden de forma suficiente → status "answered", con la respuesta detectada y cita breve de la evidencia (documento/sección).
+- Si no hay evidencia suficiente, es ambigua o contradictoria → status "pending" (queda para resolver en el kick-off).
+- Conserva su "id" y "category" originales.
+Además, agrega preguntas EXTRA solo si detectas vacíos relevantes no cubiertos por la base.
+
 Tu objetivo:
 1. Resumir el ALCANCE del SOW (qué hará y qué NO hará el bot, integraciones, casos de uso, fases).
 2. Evaluar la información faltante en DOS niveles secuenciales:
@@ -80,7 +91,7 @@ Tu objetivo:
    b) **Ficha técnica / MD** (el detalle que exige la Skill de Atom para generar el bot): prompts exactos,
       IDs de campos custom y tipificaciones, endpoints/auth/body de las integraciones, horarios de asesores,
       textos definitivos, no_answer_minutes.
-3. Generar preguntas de Kick-off (solo lo que falte) clasificadas en el checklist de Atom (§6):
+3. Devolver el estado de CADA pregunta base + las extra, clasificadas en el checklist de Atom (§6):
    Generales, Rutas e Intenciones, Captura de Datos, Cierres, Integraciones, Asignación Humana.
 
 Devuelve ÚNICAMENTE un JSON válido con esta estructura:
@@ -99,9 +110,10 @@ Devuelve ÚNICAMENTE un JSON válido con esta estructura:
   },
   "kickoffItems": [
     {
+      "baseId": "id de la pregunta base si aplica (o vacío para extra)",
       "category": "Generales" | "Rutas e Intenciones" | "Captura de Datos" | "Cierres" | "Integraciones" | "Asignación Humana",
       "question": "Pregunta concreta para el cliente",
-      "answer": "Respuesta detectada en los documentos (o vacía si falta)",
+      "answer": "Respuesta detectada en los documentos + evidencia (o vacía si falta)",
       "status": "answered" | "pending",
       "source": "ai"
     }
@@ -288,37 +300,139 @@ Genera el documento completo en Markdown con formato impecable, tabulaciones lim
  */
 app.post("/api/ai/generate-resumen", async (req, res) => {
   try {
-    const { clientName, version, kickoffItems, graph } = req.body;
+    const { clientName, version, versionLabel, versionStatus, kickoffItems, graph, documents } = req.body;
     const { ai, model } = resolveAI(req.body);
+
+    const answered = (kickoffItems || []).filter((k: any) => k.status === "answered");
+    const pending = (kickoffItems || []).filter((k: any) => k.status !== "answered");
 
     const prompt = `
 Eres un Gerente de Proyecto de Onboarding en Atom.
-Genera un **Resumen de Acuerdos** amigable, claro y ejecutivo en lenguaje no técnico para el cliente "${clientName}" (Versión ${version || 1}).
+Genera un **Documento de Acuerdos** formal y legible para el cliente "${clientName}" (Versión ${version || 1}${versionLabel ? " — " + versionLabel : ""}).
+Este documento se estructura como un SOW: numerado, por acciones pactadas, en lenguaje de negocio (no técnico, sin jerga de FlowBuilder).
 
-El resumen debe explicarse en lenguaje de negocio:
-1. **Bienvenida y Alcance del Bot**: ¿Qué logrará el asistente virtual en WhatsApp?
-2. **Ramas Principales de Atención**: ¿Qué opciones tendrá el usuario final cuando escriba?
-3. **Datos que solicitará el Bot**: ¿Qué información se recolectará y para qué?
-4. **Atención con Asesores Humanos**: ¿En qué casos y en qué horarios los atenderá un ejecutivo?
-5. **Sistemas Conectados**: ¿Con qué sistemas (CRM, base de datos) se conectará el bot?
-6. **Próximos Pasos**: Confirmación del diseño e inicio de construcción en Atom.
+## Bases del acuerdo (fuentes de verdad)
+El acuerdo se construye EXCLUSIVAMENTE a partir de:
+1. Los documentos cargados (SOW = alcance prometido; baseline = funnel).
+2. Las preguntas del kick-off YA RESUELTAS con el cliente (no incluyas lo que sigue pendiente como si estuviera acordado).
+3. La versión del flujo aprobado (diagrama).
 
-Información del proyecto:
-Kickoff Items: ${JSON.stringify(kickoffItems, null, 2)}
-Graph: ${JSON.stringify(graph, null, 2)}
+Estado de la versión del flujo: ${versionStatus || "borrador"}.
 
-Devuelve el documento en Markdown limpio, con tono profesional, claro e invitando al cliente a dar su conformidad.
+## Documentos cargados
+${
+  documents && documents.length > 0
+    ? documents.map((d: any) => `### ${d.file_name}\n${(d.extracted_text || "").slice(0, 3000)}`).join("\n\n")
+    : "Sin documentos."
+}
+
+## Preguntas resueltas (acuerdos confirmados)
+${JSON.stringify(answered, null, 2)}
+
+## Preguntas aún pendientes (NO son acuerdos; van en la sección de pendientes)
+${JSON.stringify(pending, null, 2)}
+
+## Diagrama del flujo aprobado
+${JSON.stringify(graph, null, 2)}
+
+## Formato de salida — devuelve ÚNICAMENTE un JSON con esta estructura:
+{
+  "title": "Documento de Acuerdos — ${clientName}",
+  "clientName": "${clientName}",
+  "intro": "Párrafo introductorio: propósito del bot y alcance general acordado, en lenguaje de negocio.",
+  "sections": [
+    {
+      "title": "Título de la acción pactada (ej: Atención y calificación de leads)",
+      "points": ["Punto concreto de lo acordado", "Otro punto observable acordado"]
+    }
+  ],
+  "exclusions": ["Lo que el bot NO hará (tomado del SOW)"],
+  "pending": ["Puntos aún por definir con el cliente (de las preguntas pendientes)"],
+  "nextSteps": ["Próximos pasos hacia la construcción en Atom"]
+}
+
+Reglas:
+- "sections" enumera las ACCIONES PACTADAS (rutas de atención, datos que se piden, integraciones, transferencias, cierres), cada una con puntos claros.
+- No inventes acuerdos que no estén respaldados por documentos, respuestas resueltas o el diagrama.
+- Lo que siga pendiente va SOLO en "pending", nunca como acuerdo confirmado.
+- Lenguaje claro para un cliente no técnico.
 `;
 
     const response = await ai.models.generateContent({
       model,
       contents: prompt,
+      config: {
+        responseMimeType: "application/json",
+      },
     });
 
-    res.json({ contentMd: response.text || "" });
+    const data = JSON.parse(response.text || "{}");
+    res.json({ agreement: data });
   } catch (error: any) {
     console.error("Error in /api/ai/generate-resumen:", error);
     res.status(500).json({ error: error.message || "Error al generar resumen de acuerdos" });
+  }
+});
+
+/**
+ * 7. AUTO-FIX AUDIT GAPS
+ * Given the graph + audit gaps, returns graph operations that resolve them,
+ * applied to the live canvas by the client (same schema as the AI chat).
+ */
+app.post("/api/ai/autofix", async (req, res) => {
+  try {
+    const { graph, gaps, clientName, industry } = req.body;
+    const { ai, model } = resolveAI(req.body);
+
+    const prompt = `
+Eres el corrector automático de flujos de AtomScope.
+Recibes un diagrama (React Flow nodes/edges) y una lista de hallazgos de auditoría para "${clientName || "Cliente"}" (${industry || "General"}).
+Devuelve operaciones estructuradas que RESUELVAN esos hallazgos respetando las reglas de la Skill de Atom.
+
+## Reglas Atom que deben cumplir las correcciones
+- Labels ≤30 chars, botones ≤20, tipificaciones ≤20.
+- Toda rama termina en "closing" (tipificación) o derivación humana.
+- Todo "integration" lleva errorFallbackMessage empático (nunca "Error de API") y su rama de error conectada.
+- Smarton/orchestrator con noAnswerMinutes de recupero.
+- Etapas de venta solo en ramas comerciales (Awareness→Lead→MQL→SQL).
+
+## Diagrama actual
+${JSON.stringify(graph, null, 2)}
+
+## Hallazgos a corregir
+${JSON.stringify(gaps, null, 2)}
+
+## Tipos de nodo (campo type y data.nodeType iguales)
+start, message, orchestrator, capture, integration, decision, human, closing, stage, jump, note.
+
+## Devuelve ÚNICAMENTE JSON:
+{
+  "summary": "Explicación breve de las correcciones aplicadas",
+  "operations": [
+    { "op": "add_node", "node": { "id": "node-x", "type": "closing", "position": {"x":600,"y":400}, "data": { "label":"...", "nodeType":"closing", "typificationName":"...", "typificationDesc":"..." } } },
+    { "op": "update_node", "id": "node-existente", "data": { "errorFallbackMessage": "..." } },
+    { "op": "add_edge", "edge": { "source": "node-a", "target": "node-b", "label": "" } },
+    { "op": "delete_node", "id": "node-x" },
+    { "op": "delete_edge", "id": "e-x" }
+  ]
+}
+
+- Prefiere update_node y add_edge sobre recrear nodos.
+- Al agregar nodos, conéctalos con add_edge y ubícalos sin encimar (mira las posiciones actuales).
+- No borres nodos con contenido válido; corrige lo señalado por los hallazgos.
+`;
+
+    const response = await ai.models.generateContent({
+      model,
+      contents: prompt,
+      config: { responseMimeType: "application/json" },
+    });
+
+    const data = JSON.parse(response.text || "{}");
+    res.json(data);
+  } catch (error: any) {
+    console.error("Error in /api/ai/autofix:", error);
+    res.status(500).json({ error: error.message || "Error al autocorregir el flujo" });
   }
 });
 

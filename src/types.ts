@@ -86,6 +86,8 @@ export interface DiagramGraph {
   edges: CustomCanvasEdge[];
 }
 
+export type VersionStatus = "draft" | "in_review" | "approved";
+
 export interface DiagramVersion {
   id: string;
   project_id: string;
@@ -93,7 +95,25 @@ export interface DiagramVersion {
   label: string;
   graph: DiagramGraph;
   is_current: boolean;
+  status?: VersionStatus; // borrador | en revisión | aprobado
+  approved_at?: string;
+  approved_by?: string;
   created_at: string;
+}
+
+// Análisis persistido del proyecto (documentos → alcance + información faltante).
+// Se guarda para poder regenerarlo y para alimentar las preguntas del kick-off.
+export interface ProjectAnalysis {
+  project_id: string;
+  scopeSummary?: string;
+  summary?: string;
+  detectedTone?: string;
+  detectedGoal?: string;
+  mapReadiness?: { ready: boolean; missing: string[] };
+  specReadiness?: { ready: boolean; missing: string[] };
+  generatedAt: string;
+  model?: string;
+  documentNames?: string[];
 }
 
 export type ArtifactKind = "ficha_tecnica" | "auditoria" | "resumen_acuerdos";

@@ -15,8 +15,13 @@ import {
   FileCode,
   ShieldAlert,
   Sparkles,
+  CheckCircle2,
+  Send,
+  Cloud,
+  Check,
+  RotateCcw,
 } from "lucide-react";
-import { CustomNodeType, DiagramVersion } from "../../types";
+import { CustomNodeType, DiagramVersion, VersionStatus } from "../../types";
 
 interface CanvasToolbarProps {
   onAddNode: (type: CustomNodeType) => void;
@@ -24,6 +29,8 @@ interface CanvasToolbarProps {
   currentVersion: DiagramVersion | undefined;
   onSelectVersion: (version: DiagramVersion) => void;
   onCreateNewVersion: () => void;
+  onChangeVersionStatus: (status: VersionStatus) => void;
+  saveStatus: "idle" | "saving" | "saved";
   isPresentationMode: boolean;
   onTogglePresentationMode: () => void;
   onRunAudit: () => void;
@@ -33,12 +40,20 @@ interface CanvasToolbarProps {
   auditScore?: number;
 }
 
+const STATUS_META: Record<VersionStatus, { label: string; cls: string }> = {
+  draft: { label: "Borrador", cls: "bg-line text-ink-soft" },
+  in_review: { label: "En revisión", cls: "bg-warning-soft text-warning" },
+  approved: { label: "Aprobado", cls: "bg-success-soft text-success" },
+};
+
 export const CanvasToolbar: React.FC<CanvasToolbarProps> = ({
   onAddNode,
   versions,
   currentVersion,
   onSelectVersion,
   onCreateNewVersion,
+  onChangeVersionStatus,
+  saveStatus,
   isPresentationMode,
   onTogglePresentationMode,
   onRunAudit,
@@ -47,6 +62,8 @@ export const CanvasToolbar: React.FC<CanvasToolbarProps> = ({
   isChatOpen,
   auditScore,
 }) => {
+  const status: VersionStatus = currentVersion?.status || "draft";
+  const statusMeta = STATUS_META[status];
   const nodeButtons: { type: CustomNodeType; label: string; icon: React.ReactNode; color: string }[] = [
     { type: "message", label: "Mensaje", icon: <MessageSquare className="w-4 h-4" />, color: "bg-primary hover:bg-primary-hover text-white" },
     { type: "orchestrator", label: "Smarton", icon: <Brain className="w-4 h-4" />, color: "bg-heading hover:bg-ink text-white" },
@@ -108,6 +125,77 @@ export const CanvasToolbar: React.FC<CanvasToolbarProps> = ({
                 <Plus className="w-3.5 h-3.5" />
               </button>
             </div>
+          </div>
+        </div>
+      </div>
+
+      {/* BARRA SUPERIOR CENTRAL — ESTATUS DE VERSIÓN + AUTOGUARDADO + APROBAR */}
+      <div className="absolute top-4 left-1/2 -translate-x-1/2 z-10 flex items-center gap-2 pointer-events-none">
+        <div className="bg-card/95 backdrop-blur-md p-1.5 rounded-xl border border-line shadow-lg flex items-center gap-2 pointer-events-auto">
+          {/* Estatus de la versión */}
+          <span className="text-[10px] font-bold text-ink-soft uppercase tracking-wider pl-1">
+            {currentVersion ? `v${currentVersion.version}` : "—"}
+          </span>
+          <span className={`px-2 py-0.5 rounded text-[10px] font-bold ${statusMeta.cls}`}>
+            {statusMeta.label}
+          </span>
+
+          {/* Indicador de autoguardado */}
+          <span
+            className={`flex items-center gap-1 text-[10px] font-semibold pr-1 ${
+              saveStatus === "saving" ? "text-warning" : saveStatus === "saved" ? "text-success" : "text-ink-soft"
+            }`}
+            title="Estado del autoguardado"
+          >
+            {saveStatus === "saving" ? (
+              <>
+                <Cloud className="w-3.5 h-3.5 animate-pulse" />
+                <span className="hidden lg:inline">Guardando…</span>
+              </>
+            ) : saveStatus === "saved" ? (
+              <>
+                <Check className="w-3.5 h-3.5" />
+                <span className="hidden lg:inline">Guardado</span>
+              </>
+            ) : (
+              <>
+                <Cloud className="w-3.5 h-3.5" />
+                <span className="hidden lg:inline">Autoguardado</span>
+              </>
+            )}
+          </span>
+
+          {/* Acciones de estatus */}
+          <div className="flex items-center gap-1 border-l border-line pl-2">
+            {status === "draft" && (
+              <button
+                onClick={() => onChangeVersionStatus("in_review")}
+                className="px-2 py-1 rounded-lg text-[10px] font-bold flex items-center gap-1 bg-warning-soft text-warning hover:bg-warning hover:text-white transition-all"
+                title="Enviar la versión a revisión"
+              >
+                <Send className="w-3 h-3" />
+                <span className="hidden lg:inline">A revisión</span>
+              </button>
+            )}
+            {status !== "approved" ? (
+              <button
+                onClick={() => onChangeVersionStatus("approved")}
+                className="px-2.5 py-1 rounded-lg text-[10px] font-bold flex items-center gap-1 bg-success text-white hover:bg-success/80 transition-all shadow-sm"
+                title="Aprobar esta versión del flujo"
+              >
+                <CheckCircle2 className="w-3.5 h-3.5" />
+                <span>Aprobar versión</span>
+              </button>
+            ) : (
+              <button
+                onClick={() => onChangeVersionStatus("draft")}
+                className="px-2 py-1 rounded-lg text-[10px] font-bold flex items-center gap-1 bg-surface text-ink-soft border border-line hover:text-primary transition-all"
+                title="Reabrir la versión como borrador"
+              >
+                <RotateCcw className="w-3 h-3" />
+                <span className="hidden lg:inline">Reabrir</span>
+              </button>
+            )}
           </div>
         </div>
       </div>

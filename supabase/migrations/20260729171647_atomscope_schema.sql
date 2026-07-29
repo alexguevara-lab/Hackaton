@@ -71,7 +71,7 @@ create table public.documents (
 );
 
 create table public.kickoff_items (
-  id uuid primary key default gen_random_uuid(),
+  id text primary key,
   project_id uuid not null references public.projects(id) on delete cascade,
   category text not null check (category in (
     'Generales', 'Rutas e Intenciones', 'Captura de Datos',

@@ -1,34 +1,36 @@
-import React, { useState } from "react";
+import React from "react";
 import {
   ShieldAlert,
   ShieldCheck,
-  AlertTriangle,
-  Info,
   CheckCircle,
   Wand2,
   RefreshCw,
   ArrowRight,
   Zap,
 } from "lucide-react";
-import { AuditResult, AuditGap, Project, CustomCanvasNode } from "../../types";
+import { AuditResult, AuditGap, Project } from "../../types";
 
 interface AuditViewProps {
   project: Project;
   auditResult: AuditResult | null;
   isRunningAudit: boolean;
+  isAutoFixing?: boolean;
   onRunAudit: () => void;
   onSelectNodeInCanvas: (nodeId: string) => void;
   onAutoFixGap?: (gap: AuditGap) => void;
+  onAutoFixAll?: (gaps: AuditGap[]) => void;
 }
 
 export const AuditView: React.FC<AuditViewProps> = ({
-  project,
   auditResult,
   isRunningAudit,
+  isAutoFixing,
   onRunAudit,
   onSelectNodeInCanvas,
   onAutoFixGap,
+  onAutoFixAll,
 }) => {
+  const fixableGaps = (auditResult?.gaps || []).filter((g) => g.severity !== "info");
   return (
     <div className="h-full bg-white border-l border-line p-6 text-xs text-ink flex flex-col overflow-y-auto shadow-xl">
       {/* Header */}
@@ -94,6 +96,26 @@ export const AuditView: React.FC<AuditViewProps> = ({
             </div>
           </div>
 
+          {/* Corregir todo con IA */}
+          {fixableGaps.length > 0 && onAutoFixAll && (
+            <button
+              onClick={() => onAutoFixAll(fixableGaps)}
+              disabled={isAutoFixing}
+              className="w-full py-2.5 bg-primary hover:bg-primary-hover disabled:bg-line disabled:text-ink-soft text-white font-bold rounded-xl text-xs flex items-center justify-center gap-2 transition-all shadow-md active:scale-95"
+            >
+              {isAutoFixing ? (
+                <RefreshCw className="w-4 h-4 animate-spin" />
+              ) : (
+                <Wand2 className="w-4 h-4" />
+              )}
+              <span>
+                {isAutoFixing
+                  ? "Aplicando correcciones..."
+                  : `Auto-corregir todo con IA (${fixableGaps.length})`}
+              </span>
+            </button>
+          )}
+
           {/* Gaps List */}
           <div className="space-y-3">
             <span className="font-bold text-heading text-xs block">
@@ -144,10 +166,11 @@ export const AuditView: React.FC<AuditViewProps> = ({
                     <span />
                   )}
 
-                  {gap.autoFixAvailable && onAutoFixGap && (
+                  {gap.severity !== "info" && onAutoFixGap && (
                     <button
                       onClick={() => onAutoFixGap(gap)}
-                      className="px-3 py-1 bg-primary hover:bg-primary-hover text-white font-bold rounded text-[10px] flex items-center gap-1 shadow-xs"
+                      disabled={isAutoFixing}
+                      className="px-3 py-1 bg-primary hover:bg-primary-hover disabled:bg-line disabled:text-ink-soft text-white font-bold rounded text-[10px] flex items-center gap-1 shadow-xs"
                     >
                       <Zap className="w-3 h-3" />
                       <span>Corregir con IA</span>

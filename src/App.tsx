@@ -41,10 +41,12 @@ import {
   getCurrentDiagram,
   saveDiagramVersion,
   createNewVersion,
+  setVersionStatus,
   getKickoffItems,
   saveKickoffItem,
   getDocuments,
 } from "./lib/storage";
+import { VersionStatus } from "./types";
 import { supabase, toAuthUser } from "./lib/supabase";
 
 import { nodeTypes } from "./components/canvas/CustomNodes";
@@ -64,6 +66,29 @@ import { aiFetch } from "./lib/aiConfig";
 
 // Vistas que muestran el canvas (con o sin panel lateral)
 const CANVAS_VIEWS: AppView[] = ["canvas", "kickoff", "audit"];
+
+// Color del minimapa por tipo de nodo — refleja la estructura del flujo con la
+// misma semántica de color de las tarjetas del canvas (naranja/verde/rojo/negro).
+const nodeMiniMapColor = (n: { type?: string }): string => {
+  switch (n.type) {
+    case "start":
+    case "stage":
+      return "#16a34a"; // verde — inicio / etapa de venta
+    case "closing":
+      return "#dc2626"; // rojo — cierre
+    case "integration":
+      return "#ff8a00"; // naranja — integración
+    case "message":
+    case "capture":
+      return "#ff5a00"; // primario — mensajes / captura
+    case "note":
+      return "#ffd9c2"; // naranja suave — nota
+    case "jump":
+      return "#999999";
+    default:
+      return "#292929"; // orquestador / condición / humano
+  }
+};
 
 export default function App() {
   const [projects, setProjects] = useState<Project[]>([]);
@@ -91,6 +116,8 @@ export default function App() {
   const [isSettingsOpen, setIsSettingsOpen] = useState<boolean>(false);
   const [isChatOpen, setIsChatOpen] = useState<boolean>(false);
   const [isSidebarHidden, setIsSidebarHidden] = useState<boolean>(false);
+  const [saveStatus, setSaveStatus] = useState<"idle" | "saving" | "saved">("idle");
+  const [isAutoFixing, setIsAutoFixing] = useState<boolean>(false);
   const [authUser, setAuthUser] = useState<AuthUser>({
     id: "",
     email: "",
@@ -102,6 +129,8 @@ export default function App() {
   const currentVersionRef = useRef<DiagramVersion | undefined>(undefined);
   currentVersionRef.current = currentVersion;
   const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // Evita marcar "guardando" cuando el cambio de nodes/edges viene de cargar un diagrama.
+  const hasHydratedRef = useRef(false);
 
   // Al editar el canvas se oculta automáticamente el menú principal
   const hideSidebarOnEdit = useCallback(() => {
@@ -126,6 +155,7 @@ export default function App() {
       const currentDiag = getCurrentDiagram(proj.id);
       setCurrentVersion(currentDiag);
 
+      hasHydratedRef.current = false; // el próximo cambio de nodes/edges es la carga, no una edición
       if (currentDiag && currentDiag.graph) {
         setNodes(currentDiag.graph.nodes || []);
         setEdges(currentDiag.graph.edges || []);
@@ -135,6 +165,7 @@ export default function App() {
       setDocumentsCount(getDocuments(proj.id).length);
       setAuditResult(null);
       setSelectedNode(null);
+      setSaveStatus("idle");
     },
     [setNodes, setEdges]
   );
@@ -183,15 +214,24 @@ export default function App() {
     };
   }, []);
 
-  // Autoguardado del diagrama: reacciona SIEMPRE al estado real de nodes/edges
+  // Autoguardado del diagrama: reacciona SIEMPRE al estado real de nodes/edges,
+  // reportando el estatus de guardado (Guardando… / Guardado).
   useEffect(() => {
     const version = currentVersionRef.current;
     if (!version) return;
 
+    // No mostrar "guardando" cuando el cambio viene de cargar/cambiar de diagrama.
+    if (!hasHydratedRef.current) {
+      hasHydratedRef.current = true;
+      return;
+    }
+
+    setSaveStatus("saving");
     if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
     saveTimerRef.current = setTimeout(() => {
       saveDiagramVersion({ ...version, graph: { nodes, edges } });
-    }, 400);
+      setSaveStatus("saved");
+    }, 500);
 
     return () => {
       if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
@@ -390,8 +430,56 @@ export default function App() {
     const newVer = createNewVersion(currentProject.id);
     setVersions(getDiagramVersions(currentProject.id));
     setCurrentVersion(newVer);
+    hasHydratedRef.current = false;
     setNodes(newVer.graph.nodes || []);
     setEdges(newVer.graph.edges || []);
+    setSaveStatus("idle");
+  };
+
+  // Cambiar estatus de la versión actual (borrador → revisión → aprobado)
+  const handleChangeVersionStatus = (status: VersionStatus) => {
+    if (!currentProject || !currentVersion) return;
+    // Persistir primero el diagrama vigente antes de cambiar el estatus.
+    const withGraph: DiagramVersion = { ...currentVersion, graph: { nodes, edges } };
+    saveDiagramVersion(withGraph);
+    const updated = setVersionStatus(currentVersion.id, status, authUser.name || undefined);
+    if (updated) {
+      setCurrentVersion(updated);
+      setVersions(getDiagramVersions(currentProject.id));
+      // Refleja el avance en el estatus del proyecto.
+      if (status === "approved") {
+        const p = { ...currentProject, status: "validated" as const };
+        saveProject(p);
+        setCurrentProject(p);
+        setProjects(getProjects());
+      }
+    }
+  };
+
+  // Aplica una tanda de operaciones devueltas por autofix/IA sobre el canvas.
+  const applyOps = (ops: GraphOperation[]) => handleApplyOperations(ops);
+
+  // Autocorrección de un hallazgo (o de todos) usando IA
+  const handleAutoFix = async (gaps: AuditGap[]) => {
+    if (!currentProject || gaps.length === 0) return;
+    setIsAutoFixing(true);
+    try {
+      const data = await aiFetch("/api/ai/autofix", {
+        graph: { nodes, edges },
+        gaps,
+        clientName: currentProject.client_name,
+        industry: currentProject.industry,
+      });
+      if (data.operations && Array.isArray(data.operations)) {
+        applyOps(data.operations);
+        // Re-auditar tras aplicar el parche (el motor exige reauditoría).
+        setTimeout(() => handleRunAudit(), 600);
+      }
+    } catch (err) {
+      console.error("Autofix failed", err);
+    } finally {
+      setIsAutoFixing(false);
+    }
   };
 
   // Merge de preguntas generadas por la IA (desde Documentos)
@@ -528,6 +616,9 @@ export default function App() {
               graph={{ nodes, edges }}
               kickoffItems={kickoffItems}
               version={currentVersion?.version || 1}
+              versionLabel={currentVersion?.label}
+              versionStatus={currentVersion?.status || "draft"}
+              documents={getDocuments(currentProject.id)}
             />
           </div>
         ) : showCanvas ? (
@@ -543,10 +634,14 @@ export default function App() {
                   onSelectVersion={(v) => {
                     setCurrentVersion(v);
                     saveDiagramVersion({ ...v, is_current: true });
+                    hasHydratedRef.current = false;
                     setNodes(v.graph.nodes || []);
                     setEdges(v.graph.edges || []);
+                    setSaveStatus("idle");
                   }}
                   onCreateNewVersion={handleCreateNewVersion}
+                  onChangeVersionStatus={handleChangeVersionStatus}
+                  saveStatus={saveStatus}
                   isPresentationMode={isPresentationMode}
                   onTogglePresentationMode={() => setIsPresentationMode(!isPresentationMode)}
                   onRunAudit={handleRunAudit}
@@ -579,17 +674,19 @@ export default function App() {
                 className="bg-surface"
               >
                 <Background variant={BackgroundVariant.Dots} gap={20} size={1.5} color="#D9D9D9" />
-                <Controls position="bottom-right" />
+                <Controls position="bottom-left" showInteractive={false} />
                 {!isPresentationMode && (
                   <MiniMap
                     position="bottom-right"
-                    nodeColor={(n) => {
-                      if (n.type === "start" || n.type === "stage") return "#16a34a";
-                      if (n.type === "closing") return "#dc2626";
-                      if (n.type === "integration") return "#ff8a00";
-                      if (n.type === "note") return "#ffd9c2";
-                      return "#292929";
-                    }}
+                    pannable
+                    zoomable
+                    ariaLabel="Mapa del flujo"
+                    nodeStrokeWidth={3}
+                    nodeBorderRadius={8}
+                    maskColor="rgba(41,41,41,0.06)"
+                    style={{ width: 200, height: 130 }}
+                    nodeColor={nodeMiniMapColor}
+                    nodeStrokeColor={nodeMiniMapColor}
                   />
                 )}
               </ReactFlow>
@@ -613,7 +710,10 @@ export default function App() {
                   project={currentProject}
                   auditResult={auditResult}
                   isRunningAudit={isRunningAudit}
+                  isAutoFixing={isAutoFixing}
                   onRunAudit={handleRunAudit}
+                  onAutoFixGap={(gap) => handleAutoFix([gap])}
+                  onAutoFixAll={(gaps) => handleAutoFix(gaps)}
                   onSelectNodeInCanvas={(nodeId) => {
                     const found = nodes.find((n) => n.id === nodeId);
                     if (found) setSelectedNode(found);
